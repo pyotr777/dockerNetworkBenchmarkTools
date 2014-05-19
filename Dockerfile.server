@@ -1,0 +1,7 @@
+FROM peter/iperf
+MAINTAINER Bryzgalov Peter @ AICS RIKEN
+ADD /home/peter/DockerNET/server_startup.sh /server_startup.sh
+RUN chmod +x /server_startup.sh
+EXPOSE 22 5001
+ENTRYPOINT /server_startup.sh
+CMD -s

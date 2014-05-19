@@ -1,0 +1,7 @@
+FROM peter/iperf
+MAINTAINER Bryzgalov Peter @ AICS RIKEN
+ADD client_startup.sh /client_startup.sh
+RUN chmod +x /client_startup.sh
+EXPOSE 22 5001
+ENTRYPOINT /client_startup.sh
+CMD -c 10.0.0.5 -P 1 -i 1 -p 5001 -f m -t 25

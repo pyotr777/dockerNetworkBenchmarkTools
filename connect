@@ -1,0 +1,15 @@
+#!/bin/bash
+
+[ "$1" ] || {
+    echo "Need port number"
+    exit 1
+}
+
+port=$1
+
+ssh-keygen -f "/root/.ssh/known_hosts" -R [localhost]:$port
+
+sshpass -p "docker" ssh -p $port -o StrictHostKeyChecking=no root@localhost
+
+
+

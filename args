@@ -1,0 +1,8 @@
+#!/bin/bash
+echo Enter your code
+read code << END
+123
+435
+END
+
+echo $code
