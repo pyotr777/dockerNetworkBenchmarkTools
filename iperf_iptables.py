@@ -44,6 +44,16 @@ def run(cmd):
         print "Err:"+errs
     return p.returncode,outs,errs    
 
+# Assign IP address to container
+def assignIp(cont_name,IP):
+    print "Assigning IP addres"
+    command_s="python iptables.py "+cont_name+" "+IP
+    print command_s
+    command_d=command_s.split()
+    c = subprocess.Popen([command_d],stdout=subprocess.PIPE)
+    out, err = c.communicate()
+    print out,err
+    return out
 
 # These scripts with be called on containers start
 
@@ -118,12 +128,9 @@ print "Running server container"
 print "Started server container "+contID[:8]
 
 # Assign IP to server
-print "Assigning IP address"
+print "Assigning IP address to server"
 IP=ServerIP+"/24"
-print "./pipework.sh","br1","iserv",IP
-c = subprocess.Popen(["./pipework.sh","br1",dockerlib.getContID("iserv"),IP],stdout=subprocess.PIPE)
-out, err = c.communicate()
-print out
+assignIp("iserv",IP)
 
 
 print "Running client containers"
@@ -137,10 +144,7 @@ print "Assigning IPs to clients"
 for i in range(N):
     name="client"+str(i)
     IP=IPbase+str(i+server_iplow+1)+"/24"
-    print "./pipework.sh","br1",name,IP
-    c = subprocess.Popen(["./pipework.sh","br1",dockerlib.getContID(name),IP],stdout=subprocess.PIPE)
-    out, err = c.communicate()
-    print out
+    assignIp(name,IP)
 
 
 time.sleep(measure_time + 5)
@@ -152,11 +156,10 @@ for i in range(N):
 ifremove=raw_input('Remove containers and images? (y/n) : ')
 
 if ifremove == 'y':
-    run("docker kill "+dockerlib.getContID("iserv"))
-    run("docker rm "+dockerlib.getContID("iserv"))
+    dockerlib.cleanContainers(["iserv"])    
     for i in range(N):
         name="client"+str(i)
-        run("docker kill "+dockerlib.getContID(name))
-        run("docker rm "+dockerlib.getContID(name))
+        dockerlib.cleanContainers([name])
+
     run("docker rmi "+server_image)
     run("docker rmi "+client_image)

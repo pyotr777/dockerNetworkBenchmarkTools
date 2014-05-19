@@ -56,6 +56,9 @@ def getContNames():
     return cont_names
 
 def getContID(cont_name):
+    if (cont_name is None):
+        return None
+    print "inspecting "+ cont_name
     c = subprocess.Popen(docker_api+["inspect",cont_name],stdout=subprocess.PIPE)
     r, err = c.communicate()
     if (len(r) < 5):
@@ -104,7 +107,6 @@ def getBridgeName(cont_name):
 # command - command to start containers
 #
 # Returns containers long IDs
-
 def runContainers(N,command):
     cont_longIDs = []
     i_start=1
@@ -127,3 +129,109 @@ def runContainers(N,command):
        #print num + " by name " +name
         cont_longIDs.append(num.replace('\n',''))
     return cont_longIDs
+
+# Assign external IP (fixed or with DHCP) address with iptables.
+# Parameters:
+# container ID
+# IP address with mask or "dhcp"
+def assignIPiptables(cont_name,IP):
+    make_br = True
+    add_routing = True
+    use_dhcp = False
+    
+    if (IP=="dhcp"):
+        use_dhcp = True
+        IPa = "DHCP"
+    else:
+        IPa = IP
+
+    cont_ID=getContID(str(cont_name))
+    # print cont_ID+" \t: \t" + cont_name
+
+    if (make_br):    
+        print "Assigning " +IPa+ " to container " + cont_name
+        
+        br_name=getBridgeName(cont_ID)
+        # Create virtual network interface for assigning external IP address to Docker container
+        subprocess.call(["./create_macvlan.sh",br_name])
+
+        if (use_dhcp):
+            subprocess.call(["./dhclient","-v",br_name])        
+            c = subprocess.Popen(["./getip.sh",br_name],stdout=subprocess.PIPE)
+            CIDR, err = c.communicate()
+            extip = CIDR.split("/")[0]
+        else:
+            command_s = "ip addr add "+IP+" dev "+br_name
+            command_l = command_s.split()
+            subprocess.call(command_l) 
+            extip = IP
+
+        intip = getInternalIP(cont_ID)
+        print cont_ID+ " : "+ extip + " - " + intip
+        
+        if (add_routing):
+            if (extip is None):
+                print "No ext IP for "+ cont_ID
+            elif (intip is None):
+                print "No int IP for " + cont_ID
+            else :    
+                subprocess.call(["./iptables.sh",cont_ID,extip,intip])
+
+
+# Clear docker ip settings
+# Remove interfaces (br_...)
+# Kill containers
+# Remove stopped containers
+def cleanContainers(cont_names):
+    clean_routing = True
+    remove_devices = True
+    stop_containers = True
+    remove_containers = True
+
+    for cont_name in cont_names:
+        m = re.match("\d+\.\d+\.\d+\.\d+",cont_name)
+        if (m is not None):
+            # Have IP address, not container name
+            continue
+        cont_ID=dockerlib.getContID(str(cont_name))
+        if (cont_ID is None):
+            # Probably we have container ID in command line parameters
+            cont_ID = cont_name
+        print "ID: "+ str(cont_ID)
+        extip = dockerlib.getExternalIP(cont_ID)
+        intip = dockerlib.getInternalIP(cont_ID)
+        print cont_ID+ " - "+ str(extip) + " - " + str(intip)
+            
+        if (clean_routing):
+            if (extip is None):
+                print "No ext IP for "+ cont_name
+                if (len(sys.argv) > 2):
+                    ip = sys.argv[2]
+                    m = re.match("\d+\.\d+\.\d+\.\d+",ip)
+                    if (m is not None):
+                        print "Use external IP "+ ip
+                        extip = ip
+            if (intip is None):
+                print "No int IP for " + cont_name
+                if (len(sys.argv) > 3):
+                    ip = sys.argv[3]
+                    m = re.match("\d+\.\d+\.\d+\.\d+",ip)
+                    if (m is not None):
+                        print "Use internal IP "+ ip
+                        intip = ip
+            if (extip is not None and intip is not None) :
+                print "Clean iptables"
+                subprocess.call(["./iptablesclean.sh",cont_ID,extip,intip])
+            
+    if (remove_devices):
+        dockerlib.removeInterfaces([cont_ID])
+
+        
+    if (stop_containers):
+        for cont_name in cont_names:
+            print "Kill "+ cont_name
+            subprocess.call(dockerlib.docker_api+["kill",cont_name])
+    if (remove_containers):
+        for cont_name in cont_names:
+            print "Remove "+ cont_name
+            subprocess.call(dockerlib.docker_api+["rm",cont_name])
