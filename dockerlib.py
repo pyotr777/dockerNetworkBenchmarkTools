@@ -138,7 +138,7 @@ def assignIPiptables(cont_name,IP):
     make_br = True
     add_routing = True
     use_dhcp = False
-    
+
     if (IP=="dhcp"):
         use_dhcp = True
         IPa = "DHCP"
@@ -193,13 +193,13 @@ def cleanContainers(cont_names):
         if (m is not None):
             # Have IP address, not container name
             continue
-        cont_ID=dockerlib.getContID(str(cont_name))
+        cont_ID=getContID(str(cont_name))
         if (cont_ID is None):
             # Probably we have container ID in command line parameters
             cont_ID = cont_name
         print "ID: "+ str(cont_ID)
-        extip = dockerlib.getExternalIP(cont_ID)
-        intip = dockerlib.getInternalIP(cont_ID)
+        extip = getExternalIP(cont_ID)
+        intip = getInternalIP(cont_ID)
         print cont_ID+ " - "+ str(extip) + " - " + str(intip)
             
         if (clean_routing):
@@ -224,14 +224,14 @@ def cleanContainers(cont_names):
                 subprocess.call(["./iptablesclean.sh",cont_ID,extip,intip])
             
     if (remove_devices):
-        dockerlib.removeInterfaces([cont_ID])
+        removeInterfaces([cont_ID])
 
         
     if (stop_containers):
         for cont_name in cont_names:
             print "Kill "+ cont_name
-            subprocess.call(dockerlib.docker_api+["kill",cont_name])
+            subprocess.call(docker_api+["kill",cont_name])
     if (remove_containers):
         for cont_name in cont_names:
             print "Remove "+ cont_name
-            subprocess.call(dockerlib.docker_api+["rm",cont_name])
+            subprocess.call(docker_api+["rm",cont_name])

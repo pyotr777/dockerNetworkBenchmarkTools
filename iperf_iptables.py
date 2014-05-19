@@ -74,9 +74,6 @@ fclntstp.write("/usr/sbin/sshd &\n")
 fclntstp.write("sleep 3\n")
 # sleep is to wait for pipework to assign IP address to the contianer, otherwise iperf will fail (no connection to server)
 
-fclntstp.write("ip a show eth1\n")
-# check IP settings
-
 fclntstp.write("iperf \"$@\" &>/logs.txt\n")
 # $@ - commandline parameters from "docker run ..." command
 # console output records inside of a stopped contaier can be viewed using "docker logs" command
@@ -130,7 +127,7 @@ print "Started server container "+contID[:8]
 # Assign IP to server
 print "Assigning IP address to server"
 IP=ServerIP+"/24"
-assignIp("iserv",IP)
+dockerlib.assignIPiptables("iserv",IP)
 
 
 print "Running client containers"
@@ -144,10 +141,10 @@ print "Assigning IPs to clients"
 for i in range(N):
     name="client"+str(i)
     IP=IPbase+str(i+server_iplow+1)+"/24"
-    assignIp(name,IP)
+    dockerlib.assignIPiptables(name,IP)
 
 
-time.sleep(measure_time + 5)
+time.sleep(measure_time + 8)
 for i in range(N):
     name="client"+str(i)
     print name
@@ -160,6 +157,6 @@ if ifremove == 'y':
     for i in range(N):
         name="client"+str(i)
         dockerlib.cleanContainers([name])
-
+    print "Remove images "+server_image+" and "+client_image
     run("docker rmi "+server_image)
     run("docker rmi "+client_image)
