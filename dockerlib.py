@@ -26,21 +26,22 @@ def removeInterfaces(cont_names):
         do = True
         if (do):
             br = getBridgeName(cont)
-            print "Removing " + br
-            subprocess.call(["dhclient","-d","-r",br])
+            print "Removing " + br            
             subprocess.call(["ip","link","set",br,"down"])
             ps_list=subprocess.Popen(["ps","ax"],stdout=subprocess.PIPE)
-            dchp_proc=subprocess.Popen(["grep",br],stdin=ps_list.stdout,stdout=subprocess.PIPE)
+            dchp_proc=subprocess.Popen(["grep",br],stdin=ps_list.stdout,stdout=subprocess.PIPE)            
             procls, err = dchp_proc.communicate()
             procs = procls.split("\n")
             for proc in procs:
                 if (proc.find("grep")==-1):
-                    print "Killing process "+proc
+                    print "Stopping dhclient for "+br
+                    subprocess.call(["dhclient","-d","-r",br])                    
                     m = re.match("\d+",proc)
                     if (m is not None):
                         procn = m.group(0)
+                        print "Killing process "+procn
                         subprocess.call(["kill",procn])
-            
+            print "Deleting interface "+br
             subprocess.call(["ip","link","delete",br])
 
 def getContNames():

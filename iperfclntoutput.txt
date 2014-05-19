@@ -1,0 +1,12 @@
+------------------------------------------------------------
+Client connecting to 127.0.0.1, TCP port 5001
+TCP window size: 0.00 GByte (default)
+------------------------------------------------------------
+[  3] local 127.0.0.1 port 38387 connected with 127.0.0.1 port 5001
+[ ID] Interval       Transfer     Bandwidth
+[  3]  0.0- 1.0 sec  2.85 GBytes  24.5 Gbits/sec
+[  3]  1.0- 2.0 sec  2.86 GBytes  24.6 Gbits/sec
+[  3]  2.0- 3.0 sec  2.88 GBytes  24.8 Gbits/sec
+[  3]  3.0- 4.0 sec  2.84 GBytes  24.4 Gbits/sec
+[  3]  4.0- 5.0 sec  2.84 GBytes  24.4 Gbits/sec
+[  3]  0.0- 5.0 sec  14.3 GBytes  24.5 Gbits/sec
