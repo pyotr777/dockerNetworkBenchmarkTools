@@ -1,25 +1,35 @@
 # Tests connection performance between containers with iperf.
 # First parameter (N) - number of containers.
-# Start containers: 1 with iperf server, N with iperf clients.
-# Assign IPs with pipework: 10.0.0.3/24 to server, 10.0.0.4/24,... to clients.
+# Second parameter (M) - number of servers.
+# Start containers: M with iperf server, N with iperf clients.
+# Assign IPs with pipework: 10.0.0.3/24,... first to servers, then to clients.
+
+# 1st clent connects to 1 server, 
+# M-th client connects to M-th server, (M+1)-th client connects to 1st server, etc.
 
 import sys,subprocess,dockerlib,time,math
 
 N = 2
+M = 2
 IPbase = "10.0.0." 
-server_iplow = 3  # lower number in IP address of the server
-ServerIP = IPbase+str(server_iplow)
+start_iplow = 3  # lower number in IP address of the server
 image_name = "peter/iperf"  # This image with iperf installed must exist
 server_image="peter/iserv"  # These two images will be created
 client_image="peter/iclient"
 measure_time = 5
-client_options="-c "+ServerIP+" -P 1 -i 1 -p 5001 -f g -t "+str(measure_time)
+client_startup_delay = 5
+client_options=" -P 1 -i 1 -p 5001 -f g -t "+str(measure_time)
 
 if (len(sys.argv) > 1):
     N = int(sys.argv[1])
-    if (N > 250):
-	   print "Can create max 250 containers.\n"
-	   sys.exit(1)
+	   
+if (len(sys.argv) > 2):
+    M = int(sys.argv[2])
+
+if (M + N > 250):
+    print "Can create max 250 containers.\n"
+    sys.exit(1)
+
 
 # Procedure for running shell commands 
 # Prints out command stdout and (after it) stderr
@@ -59,14 +69,10 @@ fservstp.close()
 # Client startup script: start ssh server and iperf client
 fclntstp = open("client_startup.sh",'w')
 fclntstp.write("#!/bin/bash\n")
-#fclntstp.write("echo Starting up SSH server and iperf client with options $@\n")
+# fclntstp.write("echo Starting up SSH server and iperf client with options $@\n")
 fclntstp.write("/usr/sbin/sshd &\n")
-fclntstp.write("sleep 3\n")
+fclntstp.write("sleep "+str(client_startup_delay)+"\n")
 # sleep is to wait for pipework to assign IP address to the contianer, otherwise iperf will fail (no connection to server)
-
-#fclntstp.write("ip a show eth1\n")
-# check IP settings
-
 fclntstp.write("iperf \"$@\" &>/logs.txt\n")
 # $@ - commandline parameters from "docker run ..." command
 # console output records inside of a stopped contaier can be viewed using "docker logs" command
@@ -85,7 +91,6 @@ fserv.write("RUN chmod +x /server_startup.sh\n")
 fserv.write("EXPOSE 22 5001\n")
 fserv.write("ENTRYPOINT [\"/server_startup.sh\"]\n")
 fserv.close()
-
 
 # Server image build
 print "Building server image"
@@ -112,31 +117,20 @@ run("docker build --rm=true -t "+client_image+" .")
 
 
 
+
 # Running containers
-print "Running server container"
-(exitcode,contID,err)=run("docker run -d -p 22 -p 5001 -name iserv "+server_image+" runoptions")
-print "Started server container "+contID[:8]
+print "Running server containers"
+for i in range(M): 
+    name="iserv"+str(i)
+    (exitcode,contID,err)=run("docker run -d -p 22 -p 5001 -name "+name+" "+server_image+" runoptions")
+    print "Started server container "+str(i)+ "("+contID[:8]+")"
 
 # Assign IP to server
 print "Assigning IP address"
-IP=ServerIP+"/24"
-print "./pipework.sh","br1","iserv",IP
-c = subprocess.Popen(["./pipework.sh","br1",dockerlib.getContID("iserv"),IP],stdout=subprocess.PIPE)
-out, err = c.communicate()
-print out
 
-
-print "Running client containers"
-for i in range(N):    
-    name="client"+str(i)
-    print name
-    run("docker run -d -p 22 -p 5001 -name "+name+" "+client_image+" "+client_options)
-
-# Assign IP to client
-print "Assigning IPs to clients"
-for i in range(N):
-    name="client"+str(i)
-    IP=IPbase+str(i+server_iplow+1)+"/24"
+for i in range(M): 
+    IP=IPbase+str(start_iplow+i)+"/24"
+    name="iserv"+str(i)
     print "./pipework.sh","br1",name,IP
     c = subprocess.Popen(["./pipework.sh","br1",dockerlib.getContID(name),IP],stdout=subprocess.PIPE)
     out, err = c.communicate()
@@ -146,7 +140,29 @@ for i in range(N):
         print "Err:"+err
 
 
-time.sleep(measure_time + math.floor(N/3))
+print "Running client containers"
+for i in range(N):    
+    name="client"+str(i)
+    serverIP = IPbase + str(i%(M)+start_iplow) 
+    print name + " -> " + serverIP 
+    run("docker run -d -p 22 -p 5001 -name "+name+" "+client_image+" -c "+serverIP+client_options)
+
+# Assign IP to client
+print "Assigning IPs to clients"
+for i in range(N):
+    name="client"+str(i)
+    IP=IPbase+str(i+start_iplow+M)+"/24"
+    print "./pipework.sh","br1",name,IP
+    c = subprocess.Popen(["./pipework.sh","br1",dockerlib.getContID(name),IP],stdout=subprocess.PIPE)
+    out, err = c.communicate()
+    if out is not None and len(out)>1:
+        print out
+    if err is not None and len(err)>1:
+        print "Err:"+err
+
+time.sleep(measure_time + math.floor(measure_time+client_startup_delay+(M+N)/4))
+
+print "Collecting logs"
 for i in range(N):
     name="client"+str(i)
     # print name
@@ -154,13 +170,17 @@ for i in range(N):
 
 ifremove=raw_input('Remove containers and images? (y/n) : ')
 
-if ifremove == 'y':
-    run("docker kill "+dockerlib.getContID("iserv"))
-    run("docker rm "+dockerlib.getContID("iserv"))
+if ifremove != 'n':
+    for i in range(M):
+        name="iserv"+str(i)
+        contID=dockerlib.getContID(name)
+        run("docker kill "+contID)
+        run("docker rm "+contID)
     for i in range(N):
         name="client"+str(i)
         contID=dockerlib.getContID(name)
         run("docker kill "+contID)
         run("docker rm "+contID)
+
     run("docker rmi "+server_image)
     run("docker rmi "+client_image)

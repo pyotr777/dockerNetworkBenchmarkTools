@@ -17,9 +17,13 @@ for line in lines:
         parts=line.split(" ")
         data.append(float(parts[11]))
 f.close()
-print data
+# print data
 sum = 0
 for v in data:
     sum = sum + v
+
+if len(data) <= 0:
+    print "No data"
+    sys.exit(1)
 avg = sum / len(data)
 print math.floor(avg*100)/100

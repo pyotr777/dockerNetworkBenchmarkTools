@@ -58,7 +58,7 @@ def getContNames():
 def getContID(cont_name):
     if (cont_name is None):
         return None
-    print "inspecting "+ cont_name
+    #print "inspecting "+ cont_name
     c = subprocess.Popen(docker_api+["inspect",cont_name],stdout=subprocess.PIPE)
     r, err = c.communicate()
     if (len(r) < 5):
@@ -176,6 +176,22 @@ def assignIPiptables(cont_name,IP):
                 print "No int IP for " + cont_ID
             else :    
                 subprocess.call(["./iptables.sh",cont_ID,extip,intip])
+
+
+# Assign fixed IP address to container port, attached to ovs_bridge bridge on the host
+# Parameters:
+# container ID
+# IP address with mask
+def assignIPovs(cont_name,IP):
+    contID=getContID(cont_name)
+    command=["./ovs_connect_container.sh",contID[:8],IP]
+    print command
+    c = subprocess.Popen(command,stdout=subprocess.PIPE)
+    out, err = c.communicate()
+    if out is not None and len(out)>1:
+        print out
+    if err is not None and len(err)>1:
+        print "Err:"+err
 
 
 # Clear docker ip settings
