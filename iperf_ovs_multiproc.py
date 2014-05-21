@@ -1,8 +1,10 @@
 # Tests connection performance between containers with iperf.
 # First parameter (M) - number of servers.
 # Second parameter (N) - number of containers.
+# Third parameter (L) - number of processes per client container.
 # Start containers: M with iperf server, N with iperf clients.
-# Assign IPs with pipework: 10.0.0.3/24,... first to servers, then to clients.
+# Connect containers through ovs bridge,
+# assign then IPs: 10.0.0.3/24,... first to servers, then to clients.
 
 # 1st clent connects to 1 server, 
 # M-th client connects to M-th server, (M+1)-th client connects to 1st server, etc.
@@ -11,6 +13,7 @@ import sys,subprocess,dockerlib,time,math
 
 N = 2
 M = 2
+L = 1
 IPbase = "10.0.0." 
 start_iplow = 3  # lower number in IP address of the server
 image_name = "peter/iperf"  # This image with iperf installed must exist
@@ -18,7 +21,9 @@ server_image="peter/iserv"  # These two images will be created
 client_image="peter/iclient"
 measure_time = 5
 client_startup_delay = 5
-client_options=" -P 1 -i 1 -p 5001 -f g -t "+str(measure_time)
+bridge_create="ovs-vsctl --may-exist add-br ovs-bridge"
+bridge_remove="ovs-vsctl --if-exists del-br ovs-bridge"
+
 clinet_PIDs=[]
 
 if (len(sys.argv) > 1):
@@ -27,10 +32,14 @@ if (len(sys.argv) > 1):
 if (len(sys.argv) > 2):
     N = int(sys.argv[2])
 
+if (len(sys.argv) > 3):
+    L = int(sys.argv[3])
+
 if (M + N > 250):
     print "Can create max 250 containers.\n"
     sys.exit(1)
 
+client_options=" -P "+str(L)+" -i 1 -p 5001 -f g -t "+str(measure_time)
 
 # Procedure for running shell commands 
 # Prints out command stdout and (after it) stderr
@@ -52,8 +61,19 @@ def run(cmd):
             errs = errs + err
             sys.stderr.flush()
     if errs != "":
+        print "Running command: "+cmd
         print "Err:"+errs
     return p.returncode,outs,errs    
+
+
+# Setup open vSwitch bridge
+(exitcode,contID,err)=run(bridge_create)
+if (exitcode > 0):
+    print "Error creating bridge with command:"+bridge_create+"\nExitcode ("+str(exitcode)+ ")"
+    if (err is not None and err != ""):
+        print "Err: "+err
+    sys.exit(1)
+
 
 
 # These scripts with be called on containers start
@@ -132,13 +152,13 @@ print "Assigning IP address"
 for i in range(M): 
     IP=IPbase+str(start_iplow+i)+"/24"
     name="iserv"+str(i)
-    dockerlib.assignIPpipework(name,IP)
+    dockerlib.assignIPovs(name,IP)
 
 
-print "Running client containers"
+print "Running client containers with client_options: "+client_options
 for i in range(N):    
     name="client"+str(i)
-    serverIP = IPbase + str(i%(M)+start_iplow) 
+    serverIP = IPbase + str(i%(M)+start_iplow)     
     print name + " -> " + serverIP 
     run("docker run -d -p 22 -p 5001 -name "+name+" "+client_image+" -c "+serverIP+client_options)
     PID=dockerlib.getContPID(name) 
@@ -148,8 +168,8 @@ for i in range(N):
 print "Assigning IPs to clients"
 for i in range(N):
     name="client"+str(i)
-    IP=IPbase+str(i+start_iplow+M)+"/24"
-    dockerlib.assignIPpipework(name,IP)
+    IP=IPbase+str(i+start_iplow+M)+"/24"    
+    dockerlib.assignIPovs(name,IP)
 
 time.sleep(measure_time + math.floor(measure_time+client_startup_delay+(M+N)/4))
 
@@ -158,6 +178,9 @@ for i in range(N):
     name="client"+str(i)
     # print name
     run("docker logs "+name)
+
+
+
 
 ifremove=raw_input('Remove containers and images? (y/n) : ')
 
@@ -175,7 +198,7 @@ if ifremove != 'n':
     for i in range(M):
         name="iserv"+str(i)
         removeCont(name)
-
+        
     for i in range(N):
         name="client"+str(i)
         removeCont(name)
@@ -187,3 +210,12 @@ if ifremove != 'n':
 
     run("docker rmi "+server_image)
     run("docker rmi "+client_image)
+
+
+    # Setup open vSwitch bridge
+    (exitcode,contID,err)=run(bridge_remove)
+    if (exitcode > 0):
+        print "Error removing bridge with command:"+bridge_remove+"\nExitcode ("+str(exitcode)+ ")"
+        if (err is not None and err != ""):
+            print "Err: "+err
+        sys.exit(1)

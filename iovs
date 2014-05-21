@@ -1,0 +1,4 @@
+#!/bin/bash
+
+python iperf_ovs_multiproc.py $1 $2 $3
+

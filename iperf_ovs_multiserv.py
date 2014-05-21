@@ -1,6 +1,6 @@
 # Tests connection performance between containers with iperf.
-# First parameter (N) - number of containers.
-# Second parameter (M) - number of servers.
+# First parameter (M) - number of servers.
+# Second parameter (N) - number of containers.
 # Start containers: M with iperf server, N with iperf clients.
 # Connect containers through ovs bridge,
 # assign then IPs: 10.0.0.3/24,... first to servers, then to clients.
@@ -23,11 +23,13 @@ client_options=" -P 1 -i 1 -p 5001 -f g -t "+str(measure_time)
 bridge_create="ovs-vsctl --may-exist add-br ovs-bridge"
 bridge_remove="ovs-vsctl --if-exists del-br ovs-bridge"
 
+clinet_PIDs=[]
+
 if (len(sys.argv) > 1):
-    N = int(sys.argv[1])
+    M = int(sys.argv[1])
 	   
 if (len(sys.argv) > 2):
-    M = int(sys.argv[2])
+    N = int(sys.argv[2])
 
 if (M + N > 250):
     print "Can create max 250 containers.\n"
@@ -151,15 +153,17 @@ for i in range(M):
 print "Running client containers"
 for i in range(N):    
     name="client"+str(i)
-    serverIP = IPbase + str(i%(M)+start_iplow) 
+    serverIP = IPbase + str(i%(M)+start_iplow)     
     print name + " -> " + serverIP 
     run("docker run -d -p 22 -p 5001 -name "+name+" "+client_image+" -c "+serverIP+client_options)
+    PID=dockerlib.getContPID(name) 
+    clinet_PIDs.append(PID)
 
 # Assign IP to client
 print "Assigning IPs to clients"
 for i in range(N):
     name="client"+str(i)
-    IP=IPbase+str(i+start_iplow+M)+"/24"
+    IP=IPbase+str(i+start_iplow+M)+"/24"    
     dockerlib.assignIPovs(name,IP)
 
 time.sleep(measure_time + math.floor(measure_time+client_startup_delay+(M+N)/4))
@@ -175,17 +179,29 @@ for i in range(N):
 
 ifremove=raw_input('Remove containers and images? (y/n) : ')
 
+
+def removeCont(name):    
+    PID=dockerlib.getContPID(name)    
+    contID=dockerlib.getContID(name)
+    print "Remove "+contID+" and netns "+str(PID)    
+    run("docker kill "+contID)
+    run("docker rm "+contID)    
+    if (PID !=0 ):
+        run("rm /var/run/netns/"+str(PID))
+
 if ifremove != 'n':
     for i in range(M):
         name="iserv"+str(i)
-        contID=dockerlib.getContID(name)
-        run("docker kill "+contID)
-        run("docker rm "+contID)
+        removeCont(name)
+        
     for i in range(N):
         name="client"+str(i)
-        contID=dockerlib.getContID(name)
-        run("docker kill "+contID)
-        run("docker rm "+contID)
+        removeCont(name)
+
+    # remove netspace directories of client contianers
+    for PID in clinet_PIDs:
+        print "remove netspace folder /var/run/netns/"+str(PID) 
+        run("rm /var/run/netns/"+str(PID))
 
     run("docker rmi "+server_image)
     run("docker rmi "+client_image)

@@ -1,6 +1,7 @@
 # Tests connection performance between containers with iperf.
 # First parameter (M) - number of servers.
 # Second parameter (N) - number of containers.
+# Third parameter (L) - number of processes per client container.
 # Start containers: M with iperf server, N with iperf clients.
 # Assign IPs with pipework: 10.0.0.3/24,... first to servers, then to clients.
 
@@ -11,14 +12,14 @@ import sys,subprocess,dockerlib,time,math
 
 N = 2
 M = 2
+L = 1
 IPbase = "10.0.0." 
 start_iplow = 3  # lower number in IP address of the server
 image_name = "peter/iperf"  # This image with iperf installed must exist
 server_image="peter/iserv"  # These two images will be created
 client_image="peter/iclient"
 measure_time = 5
-client_startup_delay = 5
-client_options=" -P 1 -i 1 -p 5001 -f g -t "+str(measure_time)
+client_startup_delay = 5  # Delay for assigning IP addresses to client container 
 clinet_PIDs=[]
 
 if (len(sys.argv) > 1):
@@ -27,9 +28,15 @@ if (len(sys.argv) > 1):
 if (len(sys.argv) > 2):
     N = int(sys.argv[2])
 
+if (len(sys.argv) > 3):
+    L = int(sys.argv[3])
+
 if (M + N > 250):
     print "Can create max 250 containers.\n"
     sys.exit(1)
+
+#client_options=" -P "+str(L)+" -i 1 -p 5001 -f g -t "+str(measure_time)
+client_options=" -P 1 -i 1 -p 5001 -f g -t "+str(measure_time)
 
 
 # Procedure for running shell commands 
@@ -61,22 +68,25 @@ def run(cmd):
 # Server startup script: start ssh server and iperf server
 print "Writing startup scripts"
 fservstp = open("server_startup.sh",'w')
-fservstp.write("#!/bin/bash\n")
-fservstp.write("echo Starting up SSH server and iperf server with options: $1\n")
-fservstp.write("/usr/sbin/sshd &\n")
-fservstp.write("iperf -s &> /log.txt\n")
+fservstp.write("""#!/bin/bash
+echo Starting up SSH server and iperf server with options: $1
+/usr/sbin/sshd &
+iperf -s &> /log.txt""")
 fservstp.close()
 
 # Client startup script: start ssh server and iperf client
 fclntstp = open("client_startup.sh",'w')
-fclntstp.write("#!/bin/bash\n")
-# fclntstp.write("echo Starting up SSH server and iperf client with options $@\n")
-fclntstp.write("/usr/sbin/sshd &\n")
-fclntstp.write("sleep "+str(client_startup_delay)+"\n")
+fclntstp.write("""#!/bin/bash
+#  echo Starting up SSH server and iperf client with options $@
+/usr/sbin/sshd &
+sleep %(client_startup_delay)s
 # sleep is to wait for pipework to assign IP address to the contianer, otherwise iperf will fail (no connection to server)
-fclntstp.write("iperf \"$@\" &>/logs.txt\n")
+touch /logs.txt\n""" % locals())
+for i in range (L):
+    fclntstp.write("iperf \"$@\" &>>/logs.txt &\n")
 # $@ - commandline parameters from "docker run ..." command
 # console output records inside of a stopped contaier can be viewed using "docker logs" command
+fclntstp.write("sleep "+str(measure_time+1)+"\n")
 fclntstp.write("python /getiperfresults.py /logs.txt")
 fclntstp.close()
 
@@ -85,12 +95,13 @@ fclntstp.close()
 
 # Server dockerfile
 fserv = open("Dockerfile",'w')
-fserv.write("FROM "+image_name+"\n")
-fserv.write("MAINTAINER Bryzgalov Peter @ AICS RIKEN\n")
-fserv.write("ADD server_startup.sh /server_startup.sh\n")
-fserv.write("RUN chmod +x /server_startup.sh\n")
-fserv.write("EXPOSE 22 5001\n")
-fserv.write("ENTRYPOINT [\"/server_startup.sh\"]\n")
+fserv.write("""
+FROM %(image_name)s
+MAINTAINER Bryzgalov Peter @ AICS RIKEN
+ADD server_startup.sh /server_startup.sh
+RUN chmod +x /server_startup.sh
+EXPOSE 22 5001
+ENTRYPOINT ["/server_startup.sh"]\n""" % locals())
 fserv.close()
 
 # Server image build
@@ -101,13 +112,14 @@ run("docker build --rm=true -t "+server_image+" .")
 # Client Dockerfile 
 print "Writing client Dockerfile"
 fclnt = open("Dockerfile",'w')
-fclnt.write("FROM "+image_name+"\n")
-fclnt.write("MAINTAINER Bryzgalov Peter @ AICS RIKEN\n")
-fclnt.write("ADD client_startup.sh /client_startup.sh\n")
-fclnt.write("ADD getiperfresults.py /getiperfresults.py\n")
-fclnt.write("RUN chmod +x /client_startup.sh\n")
-fclnt.write("EXPOSE 22 5001\n")
-fclnt.write("ENTRYPOINT [\"/client_startup.sh\"]\n")
+fclnt.write("""
+FROM %(image_name)s
+MAINTAINER Bryzgalov Peter @ AICS RIKEN
+ADD client_startup.sh /client_startup.sh
+ADD getiperfresults.py /getiperfresults.py
+RUN chmod +x /client_startup.sh
+EXPOSE 22 5001
+ENTRYPOINT [\"/client_startup.sh\"]\n""" % locals())
 # CMD is for default options to ENTRYPOINT command
 #fclnt.write("CMD\n")
 fclnt.close()
@@ -135,7 +147,7 @@ for i in range(M):
     dockerlib.assignIPpipework(name,IP)
 
 
-print "Running client containers"
+print "Running client containers with client_options: "+client_options
 for i in range(N):    
     name="client"+str(i)
     serverIP = IPbase + str(i%(M)+start_iplow) 
@@ -150,8 +162,9 @@ for i in range(N):
     name="client"+str(i)
     IP=IPbase+str(i+start_iplow+M)+"/24"
     dockerlib.assignIPpipework(name,IP)
+print "Mesurements started"
 
-time.sleep(measure_time + math.floor(measure_time+client_startup_delay+(M+N)/4))
+time.sleep(measure_time + client_startup_delay+ math.floor((M+N+L)/3))
 
 print "Collecting logs"
 for i in range(N):

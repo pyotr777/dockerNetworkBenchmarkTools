@@ -103,6 +103,14 @@ def getBridgeName(cont_name):
     return br_name
 
 
+def getContPID(cont_name):
+    c = subprocess.Popen(docker_api+["inspect",cont_name],stdout=subprocess.PIPE)
+    r, err = c.communicate()
+    if (len(r) < 5):
+        return None
+    jsn = json.loads(r)
+    return jsn[0]["State"]["Pid"]
+
 # Run N containers
 # command - command to start containers
 #
@@ -132,7 +140,7 @@ def runContainers(N,command):
 
 # Assign external IP (fixed or with DHCP) address with iptables.
 # Parameters:
-# container ID
+# container name
 # IP address with mask or "dhcp"
 def assignIPiptables(cont_name,IP):
     make_br = True
@@ -176,6 +184,19 @@ def assignIPiptables(cont_name,IP):
                 print "No int IP for " + cont_ID
             else :    
                 subprocess.call(["./iptables.sh",cont_ID,extip,intip])
+
+
+# Assign IP (fixed or with DHCP) address with pipework.
+# Parameters:
+# container name
+# IP address with mask or "dhcp"
+def assignIPpipework(cont_name,IP):
+    c = subprocess.Popen(["./pipework.sh","br1",getContID(cont_name),IP],stdout=subprocess.PIPE)
+    out, err = c.communicate()
+    if out is not None and len(out)>1:
+        print out
+    if err is not None and len(err)>1:
+        print "Err:"+err
 
 
 # Assign fixed IP address to container port, attached to ovs_bridge bridge on the host
