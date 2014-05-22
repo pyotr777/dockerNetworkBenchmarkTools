@@ -1,4 +1,3 @@
-
 FROM peter/iperf
 MAINTAINER Bryzgalov Peter @ AICS RIKEN
 ADD client_startup.sh /client_startup.sh

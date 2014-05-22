@@ -19,7 +19,7 @@ start_iplow = 3  # lower number in IP address of the server
 image_name = "peter/iperf"  # This image with iperf installed must exist
 server_image="peter/iserv"  # These two images will be created
 client_image="peter/iclient"
-measure_time = 5
+measure_time = 4
 client_startup_delay = 5
 bridge_create="ovs-vsctl --may-exist add-br ovs-bridge"
 bridge_remove="ovs-vsctl --if-exists del-br ovs-bridge"
@@ -39,35 +39,10 @@ if (M + N > 250):
     print "Can create max 250 containers.\n"
     sys.exit(1)
 
-client_options=" -P "+str(L)+" -i 1 -p 5001 -f g -t "+str(measure_time)
-
-# Procedure for running shell commands 
-# Prints out command stdout and (after it) stderr
-# Returns exit code, stdout and stderr
-def run(cmd):
-    p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
-    errs = ""
-    outs = ""
-    while True:
-        out = p.stdout.read(1)
-        err = p.stderr.read(1)
-        if out == '' and p.poll() != None:
-            break
-        if out != '':
-            outs = outs + out
-            sys.stdout.write(out)
-            sys.stdout.flush()
-        if err != '':
-            errs = errs + err
-            sys.stderr.flush()
-    if errs != "":
-        print "Running command: "+cmd
-        print "Err:"+errs
-    return p.returncode,outs,errs    
-
+client_options=" -P 1 -i 1 -p 5001 -f g -t "+str(measure_time)
 
 # Setup open vSwitch bridge
-(exitcode,contID,err)=run(bridge_create)
+(exitcode,contID,err)=dockerlib.run(bridge_create)
 if (exitcode > 0):
     print "Error creating bridge with command:"+bridge_create+"\nExitcode ("+str(exitcode)+ ")"
     if (err is not None and err != ""):
@@ -93,10 +68,13 @@ fclntstp.write("#!/bin/bash\n")
 # fclntstp.write("echo Starting up SSH server and iperf client with options $@\n")
 fclntstp.write("/usr/sbin/sshd &\n")
 fclntstp.write("sleep "+str(client_startup_delay)+"\n")
+fclntstp.write("touch /logs.txt\n")
 # sleep is to wait for pipework to assign IP address to the contianer, otherwise iperf will fail (no connection to server)
-fclntstp.write("iperf \"$@\" &>/logs.txt\n")
+for i in range (L):
+	fclntstp.write("iperf \"$@\" &>>/logs.txt &\n")
 # $@ - commandline parameters from "docker run ..." command
 # console output records inside of a stopped contaier can be viewed using "docker logs" command
+fclntstp.write("sleep "+str(measure_time+1)+"\n")
 fclntstp.write("python /getiperfresults.py /logs.txt")
 fclntstp.close()
 
@@ -115,7 +93,7 @@ fserv.close()
 
 # Server image build
 print "Building server image"
-run("docker build --rm=true -t "+server_image+" .")
+dockerlib.run("docker build --rm=true -t "+server_image+" .")
 
 
 # Client Dockerfile 
@@ -134,7 +112,7 @@ fclnt.close()
 
 # Client image build
 print "Building client image"
-run("docker build --rm=true -t "+client_image+" .")
+dockerlib.run("docker build --rm=true -t "+client_image+" .")
 
 
 
@@ -143,7 +121,7 @@ run("docker build --rm=true -t "+client_image+" .")
 print "Running server containers"
 for i in range(M): 
     name="iserv"+str(i)
-    (exitcode,contID,err)=run("docker run -d -p 22 -p 5001 -name "+name+" "+server_image+" runoptions")
+    (exitcode,contID,err)=dockerlib.run("docker run -d -p 22 -p 5001 -name "+name+" "+server_image+" runoptions")
     print "Started server container "+str(i)+ "("+contID[:8]+")"
 
 # Assign IP to server
@@ -160,7 +138,7 @@ for i in range(N):
     name="client"+str(i)
     serverIP = IPbase + str(i%(M)+start_iplow)     
     print name + " -> " + serverIP 
-    run("docker run -d -p 22 -p 5001 -name "+name+" "+client_image+" -c "+serverIP+client_options)
+    dockerlib.run("docker run -d -p 22 -p 5001 -name "+name+" "+client_image+" -c "+serverIP+client_options)
     PID=dockerlib.getContPID(name) 
     clinet_PIDs.append(PID)
 
@@ -171,13 +149,13 @@ for i in range(N):
     IP=IPbase+str(i+start_iplow+M)+"/24"    
     dockerlib.assignIPovs(name,IP)
 
-time.sleep(measure_time + math.floor(measure_time+client_startup_delay+(M+N)/4))
+time.sleep(measure_time  + client_startup_delay+ math.floor((M+N+L)/3))
 
 print "Collecting logs"
 for i in range(N):
     name="client"+str(i)
     # print name
-    run("docker logs "+name)
+    dockerlib.run("docker logs "+name)
 
 
 
@@ -189,10 +167,10 @@ def removeCont(name):
     PID=dockerlib.getContPID(name)    
     contID=dockerlib.getContID(name)
     print "Remove "+contID+" and netns "+str(PID)    
-    run("docker kill "+contID)
-    run("docker rm "+contID)    
+    dockerlib.run("docker kill "+contID)
+    dockerlib.run("docker rm "+contID)    
     if (PID !=0 ):
-        run("rm /var/run/netns/"+str(PID))
+        dockerlib.run("rm /var/run/netns/"+str(PID))
 
 if ifremove != 'n':
     for i in range(M):
@@ -206,14 +184,14 @@ if ifremove != 'n':
     # remove netspace directories of client contianers
     for PID in clinet_PIDs:
         print "remove netspace folder /var/run/netns/"+str(PID) 
-        run("rm /var/run/netns/"+str(PID))
+        dockerlib.run("rm /var/run/netns/"+str(PID))
 
-    run("docker rmi "+server_image)
-    run("docker rmi "+client_image)
+    dockerlib.run("docker rmi "+server_image)
+    dockerlib.run("docker rmi "+client_image)
 
 
     # Setup open vSwitch bridge
-    (exitcode,contID,err)=run(bridge_remove)
+    (exitcode,contID,err)=dockerlib.run(bridge_remove)
     if (exitcode > 0):
         print "Error removing bridge with command:"+bridge_remove+"\nExitcode ("+str(exitcode)+ ")"
         if (err is not None and err != ""):

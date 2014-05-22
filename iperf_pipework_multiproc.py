@@ -39,30 +39,6 @@ if (M + N > 250):
 client_options=" -P 1 -i 1 -p 5001 -f g -t "+str(measure_time)
 
 
-# Procedure for running shell commands 
-# Prints out command stdout and (after it) stderr
-# Returns exit code, stdout and stderr
-def run(cmd):
-    p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
-    errs = ""
-    outs = ""
-    while True:
-        out = p.stdout.read(1)
-        err = p.stderr.read(1)
-        if out == '' and p.poll() != None:
-            break
-        if out != '':
-            outs = outs + out
-            sys.stdout.write(out)
-            sys.stdout.flush()
-        if err != '':
-            errs = errs + err
-            sys.stderr.flush()
-    if errs != "":
-        print "Err:"+errs
-    return p.returncode,outs,errs    
-
-
 # These scripts with be called on containers start
 
 # Server startup script: start ssh server and iperf server
@@ -106,7 +82,7 @@ fserv.close()
 
 # Server image build
 print "Building server image"
-run("docker build --rm=true -t "+server_image+" .")
+dockerlib.run("docker build --rm=true -t "+server_image+" .")
 
 
 # Client Dockerfile 
@@ -126,7 +102,7 @@ fclnt.close()
 
 # Client image build
 print "Building client image"
-run("docker build --rm=true -t "+client_image+" .")
+dockerlib.run("docker build --rm=true -t "+client_image+" .")
 
 
 
@@ -135,7 +111,7 @@ run("docker build --rm=true -t "+client_image+" .")
 print "Running server containers"
 for i in range(M): 
     name="iserv"+str(i)
-    (exitcode,contID,err)=run("docker run -d -p 22 -p 5001 -name "+name+" "+server_image+" runoptions")
+    (exitcode,contID,err)=dockerlib.run("docker run -d -p 22 -p 5001 -name "+name+" "+server_image+" runoptions")
     print "Started server container "+str(i)+ "("+contID[:8]+")"
 
 # Assign IP to server
@@ -152,7 +128,7 @@ for i in range(N):
     name="client"+str(i)
     serverIP = IPbase + str(i%(M)+start_iplow) 
     print name + " -> " + serverIP 
-    run("docker run -d -p 22 -p 5001 -name "+name+" "+client_image+" -c "+serverIP+client_options)
+    dockerlib.run("docker run -d -p 22 -p 5001 -name "+name+" "+client_image+" -c "+serverIP+client_options)
     PID=dockerlib.getContPID(name) 
     clinet_PIDs.append(PID)
 
@@ -170,7 +146,7 @@ print "Collecting logs"
 for i in range(N):
     name="client"+str(i)
     # print name
-    run("docker logs "+name)
+    dockerlib.run("docker logs "+name)
 
 ifremove=raw_input('Remove containers and images? (y/n) : ')
 
@@ -179,10 +155,10 @@ def removeCont(name):
     PID=dockerlib.getContPID(name)    
     contID=dockerlib.getContID(name)
     print "Remove "+contID+" and netns "+str(PID)    
-    run("docker kill "+contID)
-    run("docker rm "+contID)    
+    dockerlib.run("docker kill "+contID)
+    dockerlib.run("docker rm "+contID)    
     if (PID !=0 ):
-        run("rm /var/run/netns/"+str(PID))
+        dockerlib.run("rm /var/run/netns/"+str(PID))
 
 if ifremove != 'n':
     for i in range(M):
@@ -196,7 +172,7 @@ if ifremove != 'n':
     # remove netspace directories of client contianers
     for PID in clinet_PIDs:
         print "remove netspace folder /var/run/netns/"+str(PID) 
-        run("rm /var/run/netns/"+str(PID))
+        dockerlib.run("rm /var/run/netns/"+str(PID))
 
-    run("docker rmi "+server_image)
-    run("docker rmi "+client_image)
+    dockerlib.run("docker rmi "+server_image)
+    dockerlib.run("docker rmi "+client_image)
