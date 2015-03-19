@@ -18,7 +18,7 @@ def run(cmd,v=True):
     while True:
         out = p.stdout.read(1)
         err = p.stderr.read(1)
-        if out == '' and p.poll() != None:
+        if out == '' and err == '' and p.poll() != None:
             break
         if out != '':
             outs = outs + out
@@ -33,6 +33,7 @@ def run(cmd,v=True):
         print "Err:"+errs
     return p.returncode,outs,errs    
 
+
 def confirm(message):
     sys.stdout.write(message+"\n[y/n]:")
     while True:
@@ -43,6 +44,7 @@ def confirm(message):
             return False
         else:
             sys.stdout.write("Only 'y' or 'n':")
+
 
 # Get names of running containers
 def getContNames():
@@ -56,11 +58,12 @@ def getContNames():
             cont_names.append(m[len(m)-1])
     return cont_names
 
+
 # Get container ID by name
 def getContID(cont_name):
     if (cont_name is None):
         return None
-    #print "inspecting "+ cont_name
+    print "inspecting "+ cont_name
     c = subprocess.Popen(docker_api+["inspect",cont_name],stdout=subprocess.PIPE)
     r, err = c.communicate()
     if (err is not None and len(err) > 0):
@@ -70,6 +73,7 @@ def getContID(cont_name):
         return None
     jsn = json.loads(r)
     return jsn[0]["Config"]["Hostname"]
+
 
 # Get container name by ID
 def getContName(cont_ID):
@@ -81,6 +85,7 @@ def getContName(cont_ID):
     p = re.compile("^/")
     name = p.sub("",jsn[0]["Name"])
     return name
+
 
 # Get internal IP of container
 def getInternalIP(cont_name):
@@ -102,6 +107,7 @@ def getExternalIP(cont_name):
     extip = CIDR.split("/")[0]
     return extip
 
+
 # Iptables method of providing external IPs to containers
 # connects all containers to their own brigde interfaces on the host.
 def getBridgeName(cont_name):
@@ -109,6 +115,7 @@ def getBridgeName(cont_name):
     if (len(br_name)>15):
         br_name = br_name[0:15]
     return br_name
+
 
 # Get PID of container process as seen from the host.
 # Inside container this process has PID 1.
@@ -119,6 +126,7 @@ def getContPID(cont_name):
         return None
     jsn = json.loads(r)
     return jsn[0]["State"]["Pid"]
+
 
 # Run N containers
 # command - command to start containers
@@ -142,10 +150,10 @@ def runContainers(N,command):
             i_start = i+1
             print "ERROR " + err
             continue
-       
-       #print num + " by name " +name
+        # print num + " by name " +name
         cont_longIDs.append(num.replace('\n',''))
     return cont_longIDs
+
 
 # Assign external IP (fixed or with DHCP) address with iptables.
 # Parameters:
@@ -191,7 +199,7 @@ def assignIPiptables(cont_name,IP):
                 print "No ext IP for "+ cont_ID
             elif (intip is None):
                 print "No int IP for " + cont_ID
-            else :    
+            else:    
                 subprocess.call(["./iptables.sh",cont_ID,extip,intip])
 
 
@@ -265,7 +273,7 @@ def cleanContainers(cont_names):
                     if (m is not None):
                         print "Use internal IP "+ ip
                         intip = ip
-            if (extip is not None and intip is not None) :
+            if (extip is not None and intip is not None):
                 print "Clean iptables"
                 subprocess.call(["./iptablesclean.sh",cont_ID,extip,intip])
             
@@ -281,7 +289,6 @@ def cleanContainers(cont_names):
         for cont_name in cont_names:
             print "Remove "+ cont_name
             subprocess.call(docker_api+["rm",cont_name])
-
 
             
 # Remove virtual networking interfaces
@@ -314,10 +321,10 @@ def removeInterfaces(cont_names):
 # Kill and remove container
 # and namespace, if container had it
 def removeCont(name):    
-    PID=dockerlib.getContPID(name)    
-    contID=dockerlib.getContID(name)
-    print "Remove "+contID+" and netns "+str(PID)    
-    dockerlib.run("docker kill "+contID)
-    dockerlib.run("docker rm "+contID)    
-    if (PID !=0 ):
-        dockerlib.run("rm /var/run/netns/"+str(PID))
+    PID = getContPID(name)    
+    contID = getContID(name)
+    print "Remove " + name + "("+contID+") and netns "+str(PID)    
+    run("docker kill "+contID)
+    run("docker rm "+contID)
+    if (PID !=0):
+        run("rm /var/run/netns/"+str(PID))    

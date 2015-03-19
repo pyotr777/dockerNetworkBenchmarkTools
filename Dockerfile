@@ -1,4 +1,4 @@
-FROM peter/iperf
+FROM pyotr777/iperf
 MAINTAINER Bryzgalov Peter @ AICS RIKEN
 ADD client_startup.sh /client_startup.sh
 ADD getiperfresults.py /getiperfresults.py

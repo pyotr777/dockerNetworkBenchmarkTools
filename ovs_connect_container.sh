@@ -32,7 +32,9 @@ echo $IP | grep -q / || {
         exit 1
     }
 
-contPID=$(docker inspect $contID | jq '.[0].State.Pid')
+command="docker inspect $contID"
+contPID=$($command  | jq '.[0].State.Pid')
+echo "Continer PID $contPID"
 
 [ "$contPID" ] || {
     echo "Couldn't inspect container $contID"
