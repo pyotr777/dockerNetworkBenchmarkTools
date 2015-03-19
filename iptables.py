@@ -1,7 +1,9 @@
+#!/usr/bin/python
+
 # Assign external IP (fixed or with DHCP) address with iptables.
 # Parameters:
 # 1st - container ID
-# 1st - IP address with mask or "dhcp"
+# 2nd - IP address with mask or "dhcp"
 
 
 import sys,dockerlib

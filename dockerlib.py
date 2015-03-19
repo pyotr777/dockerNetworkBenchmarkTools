@@ -11,7 +11,7 @@ docker_api=docker_api_sock
 # Procedure for running shell commands 
 # Prints out command stdout and (after it) stderr
 # Returns exit code, stdout and stderr
-def run(cmd):
+def run(cmd,v=True):
     p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
     errs = ""
     outs = ""
@@ -22,8 +22,9 @@ def run(cmd):
             break
         if out != '':
             outs = outs + out
-            sys.stdout.write(out)
-            sys.stdout.flush()
+            if (v):
+                sys.stdout.write(out)
+                sys.stdout.flush()
         if err != '':
             errs = errs + err
             sys.stderr.flush()
@@ -42,33 +43,8 @@ def confirm(message):
             return False
         else:
             sys.stdout.write("Only 'y' or 'n':")
-            
-# Remove virtual networking interfaces
-# created by ip.sh for for assigning external IP addresses to Docker containers
-def removeInterfaces(cont_names):
-    for cont in cont_names:
-        # do=confirm("Remove "+cont+"?")
-        do = True
-        if (do):
-            br = getBridgeName(cont)
-            print "Removing " + br            
-            subprocess.call(["ip","link","set",br,"down"])
-            ps_list=subprocess.Popen(["ps","ax"],stdout=subprocess.PIPE)
-            dchp_proc=subprocess.Popen(["grep",br],stdin=ps_list.stdout,stdout=subprocess.PIPE)            
-            procls, err = dchp_proc.communicate()
-            procs = procls.split("\n")
-            for proc in procs:
-                if (proc.find("grep")==-1):
-                    print "Stopping dhclient for "+br
-                    subprocess.call(["dhclient","-d","-r",br])                    
-                    m = re.match("\d+",proc)
-                    if (m is not None):
-                        procn = m.group(0)
-                        print "Killing process "+procn
-                        subprocess.call(["kill",procn])
-            print "Deleting interface "+br
-            subprocess.call(["ip","link","delete",br])
 
+# Get names of running containers
 def getContNames():
     c = subprocess.Popen(docker_api+["ps"],stdout=subprocess.PIPE)
     cont_list, err = c.communicate()
@@ -80,19 +56,22 @@ def getContNames():
             cont_names.append(m[len(m)-1])
     return cont_names
 
+# Get container ID by name
 def getContID(cont_name):
     if (cont_name is None):
         return None
     #print "inspecting "+ cont_name
     c = subprocess.Popen(docker_api+["inspect",cont_name],stdout=subprocess.PIPE)
     r, err = c.communicate()
+    if (err is not None and len(err) > 0):
+        print err
+        return None
     if (len(r) < 5):
         return None
     jsn = json.loads(r)
     return jsn[0]["Config"]["Hostname"]
 
-# Get container name
-# cont_ID
+# Get container name by ID
 def getContName(cont_ID):
     c = subprocess.Popen(docker_api+["inspect",cont_ID],stdout=subprocess.PIPE)
     r, err = c.communicate()
@@ -103,7 +82,7 @@ def getContName(cont_ID):
     name = p.sub("",jsn[0]["Name"])
     return name
 
-
+# Get internal IP of container
 def getInternalIP(cont_name):
     c = subprocess.Popen(docker_api+["inspect",cont_name],stdout=subprocess.PIPE)
     r, err = c.communicate()
@@ -112,6 +91,8 @@ def getInternalIP(cont_name):
     jsn = json.loads(r)
     return jsn[0]["NetworkSettings"]["IPAddress"]
 
+
+# Get container external IP, provided with iptables
 def getExternalIP(cont_name):
     br_name = getBridgeName(cont_name)
     c = subprocess.Popen(["./getip.sh",br_name],stdout=subprocess.PIPE)
@@ -121,13 +102,16 @@ def getExternalIP(cont_name):
     extip = CIDR.split("/")[0]
     return extip
 
+# Iptables method of providing external IPs to containers
+# connects all containers to their own brigde interfaces on the host.
 def getBridgeName(cont_name):
     br_name = "br_"+cont_name
     if (len(br_name)>15):
         br_name = br_name[0:15]
     return br_name
 
-
+# Get PID of container process as seen from the host.
+# Inside container this process has PID 1.
 def getContPID(cont_name):
     c = subprocess.Popen(docker_api+["inspect",cont_name],stdout=subprocess.PIPE)
     r, err = c.communicate()
@@ -184,7 +168,7 @@ def assignIPiptables(cont_name,IP):
     if (make_br):    
         print "Assigning " +IPa+ " to container " + cont_name
         
-        br_name=getBridgeName(cont_ID)
+        br_name=getBridgeName(cont_name)
         # Create virtual network interface for assigning external IP address to Docker container
         subprocess.call(["./create_macvlan.sh",br_name])
 
@@ -240,7 +224,7 @@ def assignIPovs(cont_name,IP):
         print "Err:"+err
 
 
-# Clear docker ip settings
+# Clear docker ip settings, set with iptables
 # Remove interfaces (br_...)
 # Kill containers
 # Remove stopped containers
@@ -297,3 +281,43 @@ def cleanContainers(cont_names):
         for cont_name in cont_names:
             print "Remove "+ cont_name
             subprocess.call(docker_api+["rm",cont_name])
+
+
+            
+# Remove virtual networking interfaces
+# created by ip.sh for for assigning external IP addresses to Docker containers
+def removeInterfaces(cont_names):
+    for cont in cont_names:
+        # do=confirm("Remove "+cont+"?")
+        do = True
+        if (do):
+            br = getBridgeName(cont)
+            print "Removing " + br            
+            subprocess.call(["ip","link","set",br,"down"])
+            ps_list=subprocess.Popen(["ps","ax"],stdout=subprocess.PIPE)
+            dchp_proc=subprocess.Popen(["grep",br],stdin=ps_list.stdout,stdout=subprocess.PIPE)            
+            procls, err = dchp_proc.communicate()
+            procs = procls.split("\n")
+            for proc in procs:
+                if (proc.find("grep")==-1):
+                    print "Stopping dhclient for "+br
+                    subprocess.call(["dhclient","-d","-r",br])                    
+                    m = re.match("\d+",proc)
+                    if (m is not None):
+                        procn = m.group(0)
+                        print "Killing process "+procn
+                        subprocess.call(["kill",procn])
+            print "Deleting interface "+br
+            subprocess.call(["ip","link","delete",br])
+
+
+# Kill and remove container
+# and namespace, if container had it
+def removeCont(name):    
+    PID=dockerlib.getContPID(name)    
+    contID=dockerlib.getContID(name)
+    print "Remove "+contID+" and netns "+str(PID)    
+    dockerlib.run("docker kill "+contID)
+    dockerlib.run("docker rm "+contID)    
+    if (PID !=0 ):
+        dockerlib.run("rm /var/run/netns/"+str(PID))

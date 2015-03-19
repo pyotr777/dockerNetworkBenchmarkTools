@@ -1,8 +1,9 @@
+#!/usr/bin/python
+
 # Start containers
 # and create external IP addresses with iptables and DHCP.
 # Parameters:
 # 1st - number of containers to create
-# other - names of running containers
 
 
 import sys,subprocess,dockerlib
@@ -12,6 +13,7 @@ N = 10
 create_cont = True
 make_br = True
 add_routing = True
+image_name="peter/iperf"
 
 if (len(sys.argv) > 1):
     N = int(sys.argv[1])
@@ -20,7 +22,7 @@ cont_longIDs=[]
 
 if (create_cont):
     print "Creating " + str(N) + " containers."
-    command = "-p 22 -p 5001 peter/iperf /usr/sbin/sshd -D"
+    command = "-p 22 -p 5001 "+image_name+" /usr/sbin/sshd -D"
     cont_longIDs=dockerlib.runContainers(N,command)
 
 if (create_cont and len(cont_longIDs) < 1):

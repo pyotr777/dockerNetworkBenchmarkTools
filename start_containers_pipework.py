@@ -1,3 +1,5 @@
+#!/usr/bin/python
+
 # Start containers
 # and assign IPs with pipeworks
 
@@ -10,24 +12,29 @@ N = 2
 IPbase = "10.0.0." 
 create_cont = True
 assign_IP = True
+image_names={
+    "ssh":"-p 22 peter/ssh",
+    "iperf":"-p 22 -p 5001 peter/iperf"
+}
+image_key="ssh"
+
 cont_names = []
+
+
 if (len(sys.argv) > 1):
     N = int(sys.argv[1])
     if (N > 250):
 	print "Can create max 250 containers.\n"
 	sys.exit(0)
 
-image_names_dic={
-    "ssh":"-p 22 peter/ssh",
-    "iperf":"-p 22 -p 5001 peter/iperf"
-}
-
 if (len(sys.argv) > 2):
-    image_name = image_names_dic.get(sys.argv[2],"-p 22 peter/ssh")
+	image_key = sys.argv[2]
+
+image_name = image_names.get(image_key,"-p 22 peter/ssh")
 
 if (create_cont):
     print "Creating " + str(N) + " containers from "+ image_name+ " image."
-    command = "-p 22 -p 5001 " + image_name + " /usr/sbin/sshd -D"
+    command = image_name + " /usr/sbin/sshd -D"
     cont_longIDs=dockerlib.runContainers(N,command)
 
 print cont_longIDs
