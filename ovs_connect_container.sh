@@ -5,10 +5,13 @@
 
 set -e
 
-read -r -d '' usage <<USAGE
+echo "v0.5"
+
+usage=$(cat  <<USAGE
 Connects container to OVS bridge (ovs-bridge by default, must exist) on host machine.
 Takes two or three parameters: container ID and IP address, OVS bridge name (optional).
 USAGE
+)
 
 if [ $# -lt 2 ]
 then
@@ -36,6 +39,7 @@ then
     bridge="$3"
 fi
 
+echo "contID=$contID IP=$IP bridge=$bridge"
 
 command="docker inspect $contID"
 contPID=$($command  | jq '.[0].State.Pid')
