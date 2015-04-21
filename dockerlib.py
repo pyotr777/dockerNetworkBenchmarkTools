@@ -138,7 +138,7 @@ def runContainers(N,command):
     for i in range(i_start,N+1):
         name="cont"+str(i)
         print "Starting "+name
-        docker_command = " run -d -name "+name + " " + command
+        docker_command = " run -d --name "+name + " " + command
         command_list = docker_command.split()
         c = subprocess.Popen(docker_api+command_list,stdout=subprocess.PIPE)
         num, err = c.communicate()
@@ -290,7 +290,20 @@ def cleanContainers(cont_names):
             print "Remove "+ cont_name
             subprocess.call(docker_api+["rm",cont_name])
 
+
+# Remove containers and network settings
+# set up witn ovs_connect_container.sh
+def removeContOVS(name):    
+    PID=getContPID(name)    
+    contID=getContID(name)
+    print "Remove "+contID    
+    run("docker kill "+contID)
+    run("docker rm "+contID)    
+    if (PID != 0):
+        print "Remove netns " + str(PID)
+        run("rm /var/run/netns/"+str(PID))
             
+
 # Remove virtual networking interfaces
 # created by ip.sh for for assigning external IP addresses to Docker containers
 def removeInterfaces(cont_names):

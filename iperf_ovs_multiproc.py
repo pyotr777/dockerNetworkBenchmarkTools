@@ -8,26 +8,27 @@
 # Connect containers through ovs bridge,
 # assign then IPs: 10.0.0.3/24,... first to servers, then to clients.
 
-# 1st clent connects to 1 server, 
-# M-th client connects to M-th server, (M+1)-th client connects to 1st server, etc.
+# 1st clent connects to 1 server,
+# M-th client connects to M-th server,
+# (M+1)-th client connects to 1st server, etc.
 
 import sys,dockerlib,time
 
 N = 2
 M = 2
 L = 1
-IPbase = "10.0.0." 
+IPbase = "10.0.0."
 start_iplow = 5  # lower number in IP address of the server
 image_name = "pyotr777/iperf"  # This image with iperf installed must exist
-server_image="peter/iserv"  # These two images will be created
-client_image="peter/iclient"
+server_image = "peter/iserv"  # These two images will be created
+client_image = "peter/iclient"
 measure_time = 7            # iperf measurements tim (sec)
 client_startup_delay = 2    # delay before client will start measurments (sec)
 client_die_delay = 30       # client container maximum life time (sec)
-bridge_create="ovs-vsctl --may-exist add-br ovs-bridge"
-bridge_remove="ovs-vsctl --if-exists del-br ovs-bridge"
+bridge_create = "ovs-vsctl --may-exist add-br ovs-bridge"
+bridge_remove = "ovs-vsctl --if-exists del-br ovs-bridge"
 
-client_PIDs=[]
+client_PIDs = []
 
 if (len(sys.argv) > 1):
     M = int(sys.argv[1])
@@ -42,12 +43,12 @@ if (M + N > 250):
     print "Can create max 250 containers.\n"
     sys.exit(1)
 
-client_options=" -P 1 -i 1 -p 5001 -f g -t "+str(measure_time)
+client_options = " -P 1 -i 1 -p 5001 -f g -t "+str(measure_time)
 
 # Setup open vSwitch bridge
-(exitcode,contID,err)=dockerlib.run(bridge_create)
+(exitcode, contID, err) = dockerlib.run(bridge_create)
 if (exitcode > 0):
-    print "Error creating bridge with command:"+bridge_create+"\nExitcode ("+str(exitcode)+ ")"
+    print "Error creating bridge with command:" + bridge_create + "\nExitcode ("+str(exitcode)+ ")"
     if (err is not None and err != ""):
         print "Err: "+err
     sys.exit(1)
@@ -174,30 +175,17 @@ for i in range(N):
     name="client"+str(i)
     print name
     dockerlib.run("docker logs "+name)
-    
 
 ifremove=raw_input('Remove containers and images? (y/n) : ')
-
-
-def removeCont(name):    
-    PID=dockerlib.getContPID(name)    
-    contID=dockerlib.getContID(name)
-    print "Remove "+contID    
-    dockerlib.run("docker kill "+contID)
-    dockerlib.run("docker rm "+contID)    
-    if (PID != 0):
-        print "Remove netns " + str(PID)
-        dockerlib.run("rm /var/run/netns/"+str(PID))
-
 
 if ifremove != 'n':
     for i in range(M):
         name="iserv"+str(i)
-        removeCont(name)
-        
+        dockerlib.removeContOVS(name)
+
     for i in range(N):
         name="client"+str(i)
-        removeCont(name)
+        dockerlib.removeContOVS(name)
 
     # remove netspace directories of client contianers
     for PID in client_PIDs:
@@ -206,7 +194,6 @@ if ifremove != 'n':
 
     dockerlib.run("docker rmi "+server_image)
     dockerlib.run("docker rmi "+client_image)
-
 
     # Setup open vSwitch bridge
     (exitcode,contID,err)=dockerlib.run(bridge_remove)
