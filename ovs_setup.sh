@@ -52,7 +52,7 @@ then
 fi
 
 # Add port to bridge, create interface
-port="ovs1"
+port="ovs1_$TT"
 echo "Setting bridge $bridge with tunnel $port type $TT to $RmtIP."
 ovs-vsctl add-port $bridge $port -- set interface $port type=$TT options:remote_ip=$RmtIP
 
