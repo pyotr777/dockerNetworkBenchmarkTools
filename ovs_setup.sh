@@ -57,7 +57,7 @@ echo "Setting bridge $bridge with tunnel $port type $TT to $RmtIP."
 ovs-vsctl add-port $bridge $port -- set interface $port type=$TT options:remote_ip=$RmtIP
 
 # Start container and connect it to the bridge
-cont=$(docker run --name iperf_$TT -d peter/iperf /usr/sbin/sshd -D)
+cont=$(docker run --name iperf_$TT -d pyotr777/iperf /usr/sbin/sshd -D)
 echo "Started container $cont \"iperf_$TT\"."
 
 ./ovs_connect_container.sh $cont $CntIP $bridge
