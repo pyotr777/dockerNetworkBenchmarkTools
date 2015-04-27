@@ -1,6 +1,6 @@
 # functions to work with docker API
 
-import sys, re,subprocess,json
+import sys, re,subprocess,json, os
 
 docker_api_sock=["docker"]
 docker_api_port=["docker","-H","localhost:4243"]
@@ -32,6 +32,9 @@ def run(cmd,v=True):
         print "Running command: "+cmd
         print "Err:"+errs
     return p.returncode,outs,errs    
+
+def open_shell(cmd):
+    subprocess.Popen(['/bin/bash','-c',cmd])
 
 
 def confirm(message):
@@ -122,6 +125,9 @@ def getBridgeName(cont_name):
 def getContPID(cont_name):
     c = subprocess.Popen(docker_api+["inspect",cont_name],stdout=subprocess.PIPE)
     r, err = c.communicate()
+    if (err is not None):
+       print "Cannot inspect container " + cont_name + ". Is container running?"
+       return None  
     if (len(r) < 5):
         return None
     jsn = json.loads(r)
@@ -293,12 +299,12 @@ def cleanContainers(cont_names):
 
 # Remove containers and network settings
 # set up witn ovs_connect_container.sh
-def removeContOVS(name):    
-    PID=getContPID(name)    
-    contID=getContID(name)
-    print "Remove "+contID    
+def removeContOVS(name):
+    PID = getContPID(name)
+    contID = getContID(name)
+    print "Remove "+contID
     run("docker kill "+contID)
-    run("docker rm "+contID)    
+    run("docker rm "+contID)  
     if (PID != 0):
         print "Remove netns " + str(PID)
         run("rm /var/run/netns/"+str(PID))
@@ -312,7 +318,7 @@ def removeInterfaces(cont_names):
         do = True
         if (do):
             br = getBridgeName(cont)
-            print "Removing " + br            
+            print "Removing " + br      
             subprocess.call(["ip","link","set",br,"down"])
             ps_list=subprocess.Popen(["ps","ax"],stdout=subprocess.PIPE)
             dchp_proc=subprocess.Popen(["grep",br],stdin=ps_list.stdout,stdout=subprocess.PIPE)            

@@ -11,7 +11,10 @@ echo "v0.5"
 usage=$(cat <<USAGE
 Setup OVS connection from a container to ovs-bridge on host machine
 and setup tunnel from ovs-bridge to remote host with given IP.
-Parameters: container IP, remote host IP and OVS tunnel type.\n
+Parameters: 
+1. container IP with net mask, 
+2. remote host IP without mask 
+3. OVS tunnel type (gre, vxlan ...).
 USAGE
 )
 
@@ -37,7 +40,7 @@ echo $CntIP | grep -q / || {
     exit 1
 }
 RmtIP=$2
-TT="gre"
+TT="gre"   # Tunnel type
 if [ $3 ]
 then
     TT="$3"
@@ -63,4 +66,8 @@ echo "Started container $cont \"iperf_$TT\"."
 ./ovs_connect_container.sh $cont $CntIP $bridge
 
 echo "Setup complete"
+docker exec -ti iperf_$TT /bin/bash
+
+
+
 
