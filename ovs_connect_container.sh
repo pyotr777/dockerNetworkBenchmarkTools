@@ -60,6 +60,7 @@ ln -s /proc/$contPID/ns/net /var/run/netns/$contPID
 ifName="tap$contPID"
 
 ovs-vsctl add-port $bridge $ifName -- set Interface $ifName type=internal
+ifconfig $ifName mtu 3000
 ip link set $ifName netns $contPID
 
 ip netns exec $contPID ip link set dev $ifName up
