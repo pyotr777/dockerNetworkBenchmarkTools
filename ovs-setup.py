@@ -72,10 +72,17 @@ tunnel_t = "gre"
 if (len(sys.argv) > 3 and sys.argv[3] is not None) :
     tunnel_t = sys.argv[3]
 
+# MTU
+mtu = ""
+if (tunnel_t == "gre"):
+    mtu = "1462"
+elif (tunnel_t == "vxlan"):
+    mtu = "1450"
+
 port = "ovs_"+tunnel_t
 port_created = False
 
-cont_name = "iperf_"+tunnel_t
+cont_name = "iperf"
 cont_created = False
 
 port_created = setupOVS(bridge_create, bridge, port, tunnel_t, remoteIP)
@@ -101,7 +108,8 @@ else:
 
 # Setup OVS
 print "Setup OVS for container " + cont_name 
-command = "./ovs_connect_container.sh " + cont_name + " " + contIP + " " + bridge
+command = "./ovs_connect_container.sh " + cont_name + " " + contIP + " " \
+            + bridge + " " + mtu
 (exitcode, out, err) = dockerlib.run(command)
 if (exitcode > 0):
     print "Error running " + command + "\nExitcode ("+str(exitcode)+ ")"

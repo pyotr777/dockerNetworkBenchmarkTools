@@ -1,19 +1,19 @@
 #!/bin/bash
 
 # Connect container to OVS bridge ovs-bridge (must exist!) on host machine.
-# Takes two parameters: container ID and IP address.
+# Takes two parameters: container ID (name) and IP address.
 
 set -e
 
-echo "v0.5"
+echo "v0.6"
 
 usage=$(cat  <<USAGE
 Connects container to OVS bridge (ovs-bridge by default, must exist) on host machine.
-Takes two or three parameters: container ID and IP address, OVS bridge name (optional).
+Takes two or three parameters: container ID (name) and IP address, OVS bridge name and MTU (optional).
 USAGE
 )
 
-if [ $# -lt 2 ]
+if [ $# -lt 3 ]
 then
     echo "$usage"
     exit 0
@@ -39,7 +39,12 @@ then
     bridge="$3"
 fi
 
-echo "contID=$contID IP=$IP bridge=$bridge"
+if [ $4 ]
+then
+    MTU=$4
+fi
+
+echo "contID=$contID IP=$IP bridge=$bridge mtu=$MTU"
 
 command="docker inspect $contID"
 contPID=$($command  | jq '.[0].State.Pid')
@@ -60,7 +65,10 @@ ln -s /proc/$contPID/ns/net /var/run/netns/$contPID
 ifName="tap$contPID"
 
 ovs-vsctl add-port $bridge $ifName -- set Interface $ifName type=internal
-ifconfig $ifName mtu 3000
+if [ -n $MTU ]
+then
+    ifconfig $ifName mtu 1450
+fi
 ip link set $ifName netns $contPID
 
 ip netns exec $contPID ip link set dev $ifName up
